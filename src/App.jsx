@@ -3,8 +3,11 @@ import ReactMarkdown from 'react-markdown';
 import { fetchModels, streamChat } from './api';
 import './index.css';
 
+// Check if there is an environment variable provided
+const isEnvKeySet = !!import.meta.env.VITE_GROQ_API_KEY;
+
 function App() {
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('groqApiKey') || '');
+  const [apiKey, setApiKey] = useState(() => isEnvKeySet ? import.meta.env.VITE_GROQ_API_KEY : (localStorage.getItem('groqApiKey') || ''));
   const [models, setModels] = useState([]);
   const [selectedModel, setSelectedModel] = useState('llama3-8b-8192');
   const [messages, setMessages] = useState([]);
@@ -12,9 +15,11 @@ function App() {
   const [isGenerating, setIsGenerating] = useState(false);
   const messagesEndRef = useRef(null);
 
-  // Save API key to local storage when changed
+  // Save API key to local storage when changed manually (only if not using env)
   useEffect(() => {
-    localStorage.setItem('groqApiKey', apiKey);
+    if (!isEnvKeySet) {
+      localStorage.setItem('groqApiKey', apiKey);
+    }
   }, [apiKey]);
 
   useEffect(() => {
@@ -29,7 +34,10 @@ function App() {
 
     // Check for standard greeting
     if (messages.length === 0) {
-      setMessages([{ role: 'assistant', content: "Hello! I'm powered by Groq. Please enter your API Key in the sidebar to start chatting." }]);
+      const greetingMsg = isEnvKeySet 
+        ? "Hello! I'm powered by Groq. How can I help you today?" 
+        : "Hello! I'm powered by Groq. Please enter your API Key in the sidebar to start chatting.";
+      setMessages([{ role: 'assistant', content: greetingMsg }]);
     }
   }, [apiKey]); // Refetch if api key changes
 
@@ -100,29 +108,32 @@ function App() {
           New chat
         </button>
         
-        <div style={{ padding: '1rem' }}>
-          <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-            Groq API Key
-          </label>
-          <input 
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="gsk_..."
-            style={{
-              width: '100%',
-              padding: '0.5rem',
-              borderRadius: '6px',
-              border: '1px solid var(--border-color)',
-              background: 'var(--bg-secondary)',
-              color: 'var(--text-primary)',
-              fontSize: '0.9rem'
-            }}
-          />
-          <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: 'var(--accent-color)', display: 'block', marginTop: '0.5rem', textDecoration: 'none' }}>
-            Get API Key
-          </a>
-        </div>
+        {/* Only show API Key input if the environment variable is not set */}
+        {!isEnvKeySet && (
+          <div style={{ padding: '1rem' }}>
+            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+              Groq API Key
+            </label>
+            <input 
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="gsk_..."
+              style={{
+                width: '100%',
+                padding: '0.5rem',
+                borderRadius: '6px',
+                border: '1px solid var(--border-color)',
+                background: 'var(--bg-secondary)',
+                color: 'var(--text-primary)',
+                fontSize: '0.9rem'
+              }}
+            />
+            <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: 'var(--accent-color)', display: 'block', marginTop: '0.5rem', textDecoration: 'none' }}>
+              Get API Key
+            </a>
+          </div>
+        )}
 
         <div style={{marginTop: 'auto', padding: '1rem 0', color: 'var(--text-secondary)', fontSize: '0.85rem'}}>
           Powered by Groq

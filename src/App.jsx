@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { fetchModels, streamChat } from './api';
+import { streamChat } from './api';
 import './index.css';
 
 // Check if there is an environment variable provided
@@ -8,8 +8,6 @@ const isEnvKeySet = !!import.meta.env.VITE_GROQ_API_KEY;
 
 function App() {
   const [apiKey, setApiKey] = useState(() => isEnvKeySet ? import.meta.env.VITE_GROQ_API_KEY : (localStorage.getItem('groqApiKey') || ''));
-  const [models, setModels] = useState([]);
-  const [selectedModel, setSelectedModel] = useState('llama3-8b-8192');
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -23,19 +21,6 @@ function App() {
     }
   }, [apiKey]);
 
-  useEffect(() => {
-    // Debounce the model fetch to prevent API rate limiting on every keystroke
-    const timer = setTimeout(() => {
-      fetchModels(apiKey).then(data => {
-        setModels(data);
-        if (data.length > 0) {
-          const defaultModel = data.find(m => m.name.includes('llama3-8b')) || data[0];
-          setSelectedModel(defaultModel.name);
-        }
-      });
-    }, 800);
-    return () => clearTimeout(timer);
-  }, [apiKey]);
 
   useEffect(() => {
     // Check for standard greeting
@@ -82,7 +67,7 @@ function App() {
       // Don't send our initial instructional message to Groq if it's the only AI message
       const chatHistory = newMessages.filter(m => !(m.role === 'assistant' && m.content.includes("Hello! I'm powered by Groq")));
       
-      const generator = streamChat(chatHistory, selectedModel, apiKey.trim());
+      const generator = streamChat(chatHistory, 'llama3-8b-8192', apiKey.trim());
       let assistantContent = '';
       
       // Keep track of the message internally, wait to add to array
@@ -168,17 +153,9 @@ function App() {
               <line x1="3" y1="18" x2="21" y2="18"></line>
             </svg>
           </button>
-          <select 
-            className="model-selector" 
-            value={selectedModel} 
-            onChange={(e) => setSelectedModel(e.target.value)}
-            disabled={isGenerating}
-          >
-            {models.length === 0 && <option value="llama3-8b-8192">llama3-8b-8192</option>}
-            {models.map(m => (
-              <option key={m.digest} value={m.name}>{m.name}</option>
-            ))}
-          </select>
+          <div className="model-selector" style={{ cursor: 'default', opacity: 0.8 }}>
+            llama3-8b-8192
+          </div>
         </header>
 
         <div className="messages-container">

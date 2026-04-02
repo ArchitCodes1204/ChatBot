@@ -67,7 +67,7 @@ function App() {
       // Don't send our initial instructional message to Groq if it's the only AI message
       const chatHistory = newMessages.filter(m => !(m.role === 'assistant' && m.content.includes("Hello! I'm powered by Groq")));
       
-      const generator = streamChat(chatHistory, 'llama3-8b-8192', apiKey.trim());
+      const generator = streamChat(chatHistory, 'llama-3.1-8b-instant', apiKey.trim());
       let assistantContent = '';
       
       // Keep track of the message internally, wait to add to array
@@ -154,7 +154,7 @@ function App() {
             </svg>
           </button>
           <div className="model-selector" style={{ cursor: 'default', opacity: 0.8 }}>
-            llama3-8b-8192
+            llama-3.1-8b-instant
           </div>
         </header>
 

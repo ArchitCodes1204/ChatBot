@@ -23,15 +23,20 @@ function App() {
   }, [apiKey]);
 
   useEffect(() => {
-    // Load models on mount
-    fetchModels(apiKey).then(data => {
-      setModels(data);
-      if (data.length > 0) {
-        const defaultModel = data.find(m => m.name.includes('llama3-8b')) || data[0];
-        setSelectedModel(defaultModel.name);
-      }
-    });
+    // Debounce the model fetch to prevent API rate limiting on every keystroke
+    const timer = setTimeout(() => {
+      fetchModels(apiKey).then(data => {
+        setModels(data);
+        if (data.length > 0) {
+          const defaultModel = data.find(m => m.name.includes('llama3-8b')) || data[0];
+          setSelectedModel(defaultModel.name);
+        }
+      });
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [apiKey]);
 
+  useEffect(() => {
     // Check for standard greeting
     setMessages(prev => {
       // Only update if there are no messages, or if the only message is our default greeting

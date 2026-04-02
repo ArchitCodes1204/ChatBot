@@ -1,31 +1,37 @@
 import { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { fetchModels, streamChat } from './ollama';
+import { fetchModels, streamChat } from './api';
 import './index.css';
 
 function App() {
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('groqApiKey') || '');
   const [models, setModels] = useState([]);
-  const [selectedModel, setSelectedModel] = useState('llama3.2');
+  const [selectedModel, setSelectedModel] = useState('llama3-8b-8192');
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const messagesEndRef = useRef(null);
 
+  // Save API key to local storage when changed
+  useEffect(() => {
+    localStorage.setItem('groqApiKey', apiKey);
+  }, [apiKey]);
+
   useEffect(() => {
     // Load models on mount
-    fetchModels().then(data => {
+    fetchModels(apiKey).then(data => {
       setModels(data);
       if (data.length > 0) {
-        const defaultModel = data.find(m => m.name.includes('llama3')) || data[0];
+        const defaultModel = data.find(m => m.name.includes('llama3-8b')) || data[0];
         setSelectedModel(defaultModel.name);
       }
     });
 
     // Check for standard greeting
     if (messages.length === 0) {
-      setMessages([{ role: 'assistant', content: "Hello! I'm running locally via Ollama. How can I help you today?" }]);
+      setMessages([{ role: 'assistant', content: "Hello! I'm powered by Groq. Please enter your API Key in the sidebar to start chatting." }]);
     }
-  }, []);
+  }, [apiKey]); // Refetch if api key changes
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -38,6 +44,11 @@ function App() {
   const handleSend = async () => {
     if (!input.trim() || isGenerating) return;
 
+    if (!apiKey.trim()) {
+      setMessages(prev => [...prev, { role: 'assistant', content: '⚠️ **Missing API Key:** Please enter your Groq API Key in the sidebar first.' }]);
+      return;
+    }
+
     const userMessage = { role: 'user', content: input.trim() };
     const newMessages = [...messages, userMessage];
     setMessages(newMessages);
@@ -45,7 +56,10 @@ function App() {
     setIsGenerating(true);
 
     try {
-      const generator = streamChat(newMessages, selectedModel);
+      // Don't send our initial instructional message to Groq if it's the only AI message
+      const chatHistory = newMessages.filter(m => !(m.role === 'assistant' && m.content.includes("Hello! I'm powered by Groq")));
+      
+      const generator = streamChat(chatHistory, selectedModel, apiKey.trim());
       let assistantContent = '';
       
       // Keep track of the message internally, wait to add to array
@@ -61,7 +75,7 @@ function App() {
       }
     } catch (err) {
       console.error(err);
-      setMessages(prev => [...prev, { role: 'assistant', content: '⚠️ **Error:** Failed to communicate with local Ollama. Ensure Ollama is running and OLLAMA_ORIGINS="*" is set.' }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: `⚠️ **Error:** ${err.message}` }]);
     } finally {
       setIsGenerating(false);
     }
@@ -85,8 +99,33 @@ function App() {
           </svg>
           New chat
         </button>
+        
+        <div style={{ padding: '1rem' }}>
+          <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+            Groq API Key
+          </label>
+          <input 
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder="gsk_..."
+            style={{
+              width: '100%',
+              padding: '0.5rem',
+              borderRadius: '6px',
+              border: '1px solid var(--border-color)',
+              background: 'var(--bg-secondary)',
+              color: 'var(--text-primary)',
+              fontSize: '0.9rem'
+            }}
+          />
+          <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: 'var(--accent-color)', display: 'block', marginTop: '0.5rem', textDecoration: 'none' }}>
+            Get API Key
+          </a>
+        </div>
+
         <div style={{marginTop: 'auto', padding: '1rem 0', color: 'var(--text-secondary)', fontSize: '0.85rem'}}>
-          Powered by Ollama
+          Powered by Groq
         </div>
       </aside>
 
@@ -99,7 +138,7 @@ function App() {
             onChange={(e) => setSelectedModel(e.target.value)}
             disabled={isGenerating}
           >
-            {models.length === 0 && <option value="llama3.2">llama3.2</option>}
+            {models.length === 0 && <option value="llama3-8b-8192">llama3-8b-8192</option>}
             {models.map(m => (
               <option key={m.digest} value={m.name}>{m.name}</option>
             ))}
@@ -136,7 +175,7 @@ function App() {
           <div className="input-box">
             <textarea 
               className="input-field"
-              placeholder="Ask local model anything..."
+              placeholder="Message AI..."
               value={input}
               onChange={(e) => {
                 setInput(e.target.value);

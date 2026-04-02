@@ -33,12 +33,21 @@ function App() {
     });
 
     // Check for standard greeting
-    if (messages.length === 0) {
-      const greetingMsg = isEnvKeySet 
-        ? "Hello! I'm powered by Groq. How can I help you today?" 
-        : "Hello! I'm powered by Groq. Please enter your API Key in the sidebar to start chatting.";
-      setMessages([{ role: 'assistant', content: greetingMsg }]);
-    }
+    setMessages(prev => {
+      // Only update if there are no messages, or if the only message is our default greeting
+      if (prev.length === 0 || (prev.length === 1 && prev[0].role === 'assistant' && prev[0].content.includes("Hello! I'm powered by Groq"))) {
+        const hasKey = isEnvKeySet || (apiKey && apiKey.trim() !== '');
+        const greetingMsg = hasKey 
+          ? "Hello! I'm powered by Groq. How can I help you today?" 
+          : "Hello! I'm powered by Groq. Please enter your API Key in the sidebar to start chatting.";
+        
+        if (prev.length === 1 && prev[0].content === greetingMsg) {
+          return prev;
+        }
+        return [{ role: 'assistant', content: greetingMsg }];
+      }
+      return prev;
+    });
   }, [apiKey]); // Refetch if api key changes
 
   const scrollToBottom = () => {

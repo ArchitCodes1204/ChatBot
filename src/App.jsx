@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { streamChat } from './api';
 import './index.css';
+import logo from './assets/notebot_logo.png';
 
 // Check if there is an environment variable provided
 const isEnvKeySet = !!import.meta.env.VITE_GROQ_API_KEY;
@@ -26,11 +27,11 @@ function App() {
     // Check for standard greeting
     setMessages(prev => {
       // Only update if there are no messages, or if the only message is our default greeting
-      if (prev.length === 0 || (prev.length === 1 && prev[0].role === 'assistant' && prev[0].content.includes("Hello! I'm powered by Groq"))) {
+      if (prev.length === 0 || (prev.length === 1 && prev[0].role === 'assistant' && (prev[0].content.includes("Hello! I'm powered by Groq") || prev[0].content.includes("Hello! I'm NoteBot")))) {
         const hasKey = isEnvKeySet || (apiKey && apiKey.trim() !== '');
         const greetingMsg = hasKey 
-          ? "Hello! I'm powered by Groq. How can I help you today?" 
-          : "Hello! I'm powered by Groq. Please enter your API Key in the sidebar to start chatting.";
+          ? "Hello! I'm NoteBot. How can I help you take notes and brainstorm today?" 
+          : "Hello! I'm NoteBot. Please enter your API Key in the sidebar to start chatting.";
         
         if (prev.length === 1 && prev[0].content === greetingMsg) {
           return prev;
@@ -65,7 +66,7 @@ function App() {
 
     try {
       // Don't send our initial instructional message to Groq if it's the only AI message
-      const chatHistory = newMessages.filter(m => !(m.role === 'assistant' && m.content.includes("Hello! I'm powered by Groq")));
+      const chatHistory = newMessages.filter(m => !(m.role === 'assistant' && (m.content.includes("Hello! I'm powered by Groq") || m.content.includes("Hello! I'm NoteBot"))));
       
       const generator = streamChat(chatHistory, 'llama-3.1-8b-instant', apiKey.trim());
       let assistantContent = '';
@@ -103,6 +104,10 @@ function App() {
 
       {/* Sidebar */}
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
+        <div className="sidebar-header" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', color: 'var(--text-primary)', fontSize: '1.2rem', fontWeight: 700 }}>
+          <img src={logo} alt="NoteBot Logo" style={{ width: '32px', height: '32px', borderRadius: '8px' }} />
+          NoteBot
+        </div>
         <button className="new-chat-btn" onClick={() => setMessages([])}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -138,8 +143,8 @@ function App() {
           </div>
         )}
 
-        <div style={{marginTop: 'auto', padding: '1rem 0', color: 'var(--text-secondary)', fontSize: '0.85rem'}}>
-          Powered by Groq
+        <div style={{marginTop: 'auto', padding: '1rem 0', color: 'var(--text-secondary)', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+          Powered by NoteBot
         </div>
       </aside>
 

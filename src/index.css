@@ -79,7 +79,18 @@ body, html, #root {
   align-items: center;
   padding: 0 2rem;
   border-bottom: 1px solid var(--border);
-  justify-content: flex-end;
+  justify-content: space-between;
+}
+
+.mobile-menu-btn {
+  display: none;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 0.5rem;
+  align-items: center;
+  justify-content: center;
 }
 
 .model-selector {
@@ -252,3 +263,53 @@ body, html, #root {
 .message-content p { margin-top: 0; margin-bottom: 1rem; }
 .message-content p:last-child { margin-bottom: 0; }
 .message-content ul, .message-content ol { margin-top: 0; padding-left: 1.5rem; }
+
+/* Responsive Mobile Layout */
+@media (max-width: 768px) {
+  .sidebar {
+    position: absolute;
+    left: -280px;
+    top: 0;
+    bottom: 0;
+    z-index: 50;
+    opacity: 0;
+    pointer-events: none;
+  }
+  
+  .sidebar.open {
+    left: 0;
+    opacity: 1;
+    pointer-events: auto;
+    box-shadow: 10px 0 30px rgba(0,0,0,0.5);
+  }
+
+  .sidebar-overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 40;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    animation: fadeIn 0.3s ease-out forwards;
+  }
+
+  .mobile-menu-btn {
+    display: flex;
+  }
+
+  .header {
+    padding: 0 1rem;
+  }
+
+  .messages-container {
+    padding: 1.5rem 1rem;
+  }
+
+  .input-container {
+    padding: 0 1rem 1.5rem 1rem;
+  }
+
+  .message {
+    gap: 0.75rem;
+  }
+}

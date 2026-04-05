@@ -4,7 +4,7 @@ import { streamChat } from './api';
 import './index.css';
 import logo from './assets/notebot_logo.png';
 
-// Check if there is an environment variable provided
+// Check if there is an environment variable provided fit check
 const isEnvKeySet = !!import.meta.env.VITE_GROQ_API_KEY;
 
 function App() {

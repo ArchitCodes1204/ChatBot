@@ -188,6 +188,7 @@ function App() {
           )}
           <div ref={messagesEndRef} />
         </div>
+        
 
         <div className="input-container">
           <div className="input-box">

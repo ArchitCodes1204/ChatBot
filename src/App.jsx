@@ -15,7 +15,7 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const messagesEndRef = useRef(null);
 
-  // Save API key to local storage when changed manually (only if not using env)
+  // Save API key to local storage when changed manually
   useEffect(() => {
     if (!isEnvKeySet) {
       localStorage.setItem('groqApiKey', apiKey);

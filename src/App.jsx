@@ -5,7 +5,6 @@ import './index.css';
 import logo from './assets/notebot_logo.png';
 import { extractTextFromFile } from './utils/fileParser';
 
-// Check if there is an environment variable provided fit check
 const isEnvKeySet = !!import.meta.env.VITE_GROQ_API_KEY;
 
 function App() {
@@ -19,18 +18,14 @@ function App() {
   const [isExtracting, setIsExtracting] = useState(false);
   const fileInputRef = useRef(null);
 
-  // Save API key to local storage when changed manually (only if not using env)
   useEffect(() => {
     if (!isEnvKeySet) {
       localStorage.setItem('groqApiKey', apiKey);
     }
   }, [apiKey]);
 
-
   useEffect(() => {
-    // Check for standard greeting
     setMessages(prev => {
-      // Only update if there are no messages, or if the only message is our default greeting
       if (prev.length === 0 || (prev.length === 1 && prev[0].role === 'assistant' && (prev[0].content.includes("Hello! I'm powered by Groq") || prev[0].content.includes("Hello! I'm NoteBot")))) {
         const hasKey = isEnvKeySet || (apiKey && apiKey.trim() !== '');
         const greetingMsg = hasKey 
@@ -44,7 +39,7 @@ function App() {
       }
       return prev;
     });
-  }, [apiKey]); // Refetch if api key changes
+  }, [apiKey]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -55,21 +50,21 @@ function App() {
   }, [messages, isGenerating]);
 
   const handleSend = async () => {
-    if (!input.trim() || isGenerating) return;
+    if ((!input.trim() && extractedFiles.length === 0) || isGenerating) return;
 
     if (!apiKey.trim()) {
       setMessages(prev => [...prev, { role: 'assistant', content: '⚠️ **Missing API Key:** Please enter your Groq API Key in the sidebar first.' }]);
       return;
     }
 
-    const userMessage = { role: 'user', content: input.trim() };
+    const currentInput = input;
+    const userMessage = { role: 'user', content: currentInput.trim() || 'Attached files.' };
     const newMessages = [...messages, userMessage];
     setMessages(newMessages);
     setInput('');
     setIsGenerating(true);
 
     try {
-      // Don't send our initial instructional message to Groq if it's the only AI message
       const chatHistory = newMessages.filter(m => !(m.role === 'assistant' && (m.content.includes("Hello! I'm powered by Groq") || m.content.includes("Hello! I'm NoteBot"))));
       
       let contextPrefix = '';
@@ -86,7 +81,6 @@ function App() {
       const generator = streamChat(API_messages, 'llama-3.1-8b-instant', apiKey.trim());
       let assistantContent = '';
       
-      // Keep track of the message internally, wait to add to array
       setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
 
       for await (const chunk of generator) {
@@ -148,28 +142,27 @@ function App() {
 
   return (
     <div className="app-container">
-      {/* Sidebar Overlay for Mobile */}
       {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)}></div>}
 
-      {/* Sidebar */}
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', color: 'var(--text-primary)', fontSize: '1.2rem', fontWeight: 700 }}>
-          <img src={logo} alt="NoteBot Logo" style={{ width: '32px', height: '32px', borderRadius: '8px' }} />
+          <div style={{width: '32px', height: '32px', borderRadius: '50%', background: 'var(--accent-gradient)', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1a1a1a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"></path><path d="M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"></path><path d="M12 18v4"></path><path d="M18 12h4"></path><path d="M6 12H2"></path></svg>
+          </div>
           NoteBot
         </div>
         <button className="new-chat-btn" onClick={() => setMessages([])}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
           New chat
         </button>
         
-        {/* Only show API Key input if the environment variable is not set */}
         {!isEnvKeySet && (
-          <div style={{ padding: '1rem' }}>
-            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-              Groq API Key
+          <div style={{ padding: '1.5rem 0' }}>
+            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 500 }}>
+              API Key (Groq)
             </label>
             <input 
               type="password"
@@ -178,15 +171,17 @@ function App() {
               placeholder="gsk_..."
               style={{
                 width: '100%',
-                padding: '0.5rem',
-                borderRadius: '6px',
-                border: '1px solid var(--border-color)',
-                background: 'var(--bg-secondary)',
+                padding: '0.6rem 0.75rem',
+                borderRadius: '8px',
+                border: '1px solid var(--border)',
+                background: 'var(--bg)',
                 color: 'var(--text-primary)',
-                fontSize: '0.9rem'
+                fontSize: '0.9rem',
+                outline: 'none',
+                boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.02)'
               }}
             />
-            <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: 'var(--accent-color)', display: 'block', marginTop: '0.5rem', textDecoration: 'none' }}>
+            <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" style={{ fontSize: '0.8rem', color: '#1fca7b', display: 'inline-block', marginTop: '0.5rem', textDecoration: 'none', fontWeight: 500 }}>
               Get API Key
             </a>
           </div>
@@ -197,7 +192,6 @@ function App() {
         </div>
       </aside>
 
-      {/* Main Chat Area */}
       <main className="chat-area">
         <header className="header">
           <button className="mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
@@ -207,30 +201,36 @@ function App() {
               <line x1="3" y1="18" x2="21" y2="18"></line>
             </svg>
           </button>
-          <div className="model-selector" style={{ cursor: 'default', opacity: 0.8 }}>
-            llama-3.1-8b-instant
+          <div className="model-selector">
+            llama-3.1-8b
           </div>
         </header>
 
         <div className="messages-container">
           {messages.map((msg, index) => (
-            <div key={index} className="message">
+            <div key={index} className={`message ${msg.role === 'user' ? 'user-message' : 'ai-message'}`}>
               <div className={`message-avatar ${msg.role === 'user' ? 'user-avatar' : 'ai-avatar'}`}>
-                {msg.role === 'user' ? 'U' : 'AI'}
+                {msg.role === 'user' ? '' : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"></path><path d="M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"></path><path d="M12 18v4"></path><path d="M18 12h4"></path><path d="M6 12H2"></path></svg>}
               </div>
               <div className="message-content">
-                <ReactMarkdown>{msg.content}</ReactMarkdown>
+                <div className="message-bubble">
+                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                </div>
               </div>
             </div>
           ))}
           {isGenerating && messages[messages.length - 1]?.role !== 'assistant' && (
-            <div className="message">
-              <div className="message-avatar ai-avatar">AI</div>
+            <div className="message ai-message">
+              <div className="message-avatar ai-avatar">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"></path><path d="M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"></path><path d="M12 18v4"></path><path d="M18 12h4"></path><path d="M6 12H2"></path></svg>
+              </div>
               <div className="message-content">
-                <div className="typing-indicator">
-                  <span className="typing-dot"></span>
-                  <span className="typing-dot"></span>
-                  <span className="typing-dot"></span>
+                <div className="message-bubble">
+                  <div className="typing-indicator">
+                    <span className="typing-dot"></span>
+                    <span className="typing-dot"></span>
+                    <span className="typing-dot"></span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -238,7 +238,6 @@ function App() {
           <div ref={messagesEndRef} />
         </div>
         
-
         <div className="input-container">
           <div className={`input-box ${extractedFiles.length > 0 ? 'with-files' : ''}`}>
             {extractedFiles.length > 0 && (
@@ -263,14 +262,6 @@ function App() {
             )}
 
             <div className="input-row">
-              <input 
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileUpload}
-                style={{ display: 'none' }}
-                multiple
-                accept=".pdf,.docx,.txt,image/*"
-              />
               <button 
                 className="attachment-btn" 
                 onClick={() => fileInputRef.current?.click()} 
@@ -279,10 +270,18 @@ function App() {
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
               </button>
+              <input 
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                style={{ display: 'none' }}
+                multiple
+                accept=".pdf,.docx,.txt,image/*"
+              />
 
               <textarea 
                 className="input-field"
-                placeholder="Message AI..."
+                placeholder="Reply to NoteBot..."
                 value={input}
                 onChange={(e) => {
                   setInput(e.target.value);
@@ -297,7 +296,7 @@ function App() {
                 onClick={handleSend}
                 disabled={(!input.trim() && extractedFiles.length === 0) || isGenerating || isExtracting}
               >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="22" y1="2" x2="11" y2="13"></line>
                   <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
                 </svg>

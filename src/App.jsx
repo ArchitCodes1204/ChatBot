@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import { streamChat } from './api';
 import './index.css';
 import logo from './assets/notebot_logo.png';
+import { extractTextFromFile } from './utils/fileParser';
 
 // Check if there is an environment variable provided fit check
 const isEnvKeySet = !!import.meta.env.VITE_GROQ_API_KEY;
@@ -14,8 +15,11 @@ function App() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const messagesEndRef = useRef(null);
+  const [extractedFiles, setExtractedFiles] = useState([]);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const fileInputRef = useRef(null);
 
-  // Save API key to local storage when changed manually
+  // Save API key to local storage when changed manually (only if not using env)
   useEffect(() => {
     if (!isEnvKeySet) {
       localStorage.setItem('groqApiKey', apiKey);
@@ -68,7 +72,18 @@ function App() {
       // Don't send our initial instructional message to Groq if it's the only AI message
       const chatHistory = newMessages.filter(m => !(m.role === 'assistant' && (m.content.includes("Hello! I'm powered by Groq") || m.content.includes("Hello! I'm NoteBot"))));
       
-      const generator = streamChat(chatHistory, 'llama-3.1-8b-instant', apiKey.trim());
+      let contextPrefix = '';
+      if (extractedFiles.length > 0) {
+        let fileContents = extractedFiles.map(f => `--- Start of ${f.name} ---\n${f.content}\n--- End of ${f.name} ---\n`).join('\n');
+        contextPrefix = "You are NoteBot, an advanced AI assistant. Your task is to help users understand, summarize, and extract information from uploaded files and images. Below is the text extracted from the user's uploaded files.\nUse this content as the MAIN SOURCE OF TRUTH to answer the user's questions. If the user asks about the files and the answer is not in the text, clearly say: 'This information is not available in the uploaded content.'\n\nUploaded Content:\n" + fileContents + "\n\n";
+      }
+
+      const API_messages = [...chatHistory];
+      if (contextPrefix) {
+        API_messages.unshift({ role: 'system', content: contextPrefix });
+      }
+
+      const generator = streamChat(API_messages, 'llama-3.1-8b-instant', apiKey.trim());
       let assistantContent = '';
       
       // Keep track of the message internally, wait to add to array
@@ -95,6 +110,40 @@ function App() {
       e.preventDefault();
       handleSend();
     }
+  };
+
+  const handleFileUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (!files || files.length === 0) return;
+    
+    setIsExtracting(true);
+    const newExtractedFiles = [];
+    
+    for (const file of files) {
+      try {
+        const text = await extractTextFromFile(file);
+        newExtractedFiles.push({
+          id: Math.random().toString(36).substring(7),
+          name: file.name,
+          content: text,
+          type: file.type
+        });
+      } catch (err) {
+        console.error("Error reading file:", err);
+        alert(`Failed to read ${file.name}. ${err.message}`);
+      }
+    }
+    
+    setExtractedFiles(prev => [...prev, ...newExtractedFiles]);
+    setIsExtracting(false);
+    
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const removeFile = (id) => {
+    setExtractedFiles(prev => prev.filter(f => f.id !== id));
   };
 
   return (
@@ -191,29 +240,69 @@ function App() {
         
 
         <div className="input-container">
-          <div className="input-box">
-            <textarea 
-              className="input-field"
-              placeholder="Message AI..."
-              value={input}
-              onChange={(e) => {
-                setInput(e.target.value);
-                e.target.style.height = 'auto';
-                e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
-              }}
-              onKeyDown={handleKeyDown}
-              rows={1}
-            />
-            <button 
-              className="send-btn" 
-              onClick={handleSend}
-              disabled={!input.trim() || isGenerating}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="22" y1="2" x2="11" y2="13"></line>
-                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-              </svg>
-            </button>
+          <div className={`input-box ${extractedFiles.length > 0 ? 'with-files' : ''}`}>
+            {extractedFiles.length > 0 && (
+              <div className="file-chips">
+                {extractedFiles.map(f => (
+                  <div key={f.id} className="file-chip">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16h16V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                    <span style={{maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{f.name}</span>
+                    <button className="remove-file-btn" onClick={() => removeFile(f.id)}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {isExtracting && (
+              <div className="loading-files">
+                <div className="typing-indicator" style={{padding:0}}><span className="typing-dot"></span><span className="typing-dot"></span><span className="typing-dot"></span></div>
+                Extracting text...
+              </div>
+            )}
+
+            <div className="input-row">
+              <input 
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                style={{ display: 'none' }}
+                multiple
+                accept=".pdf,.docx,.txt,image/*"
+              />
+              <button 
+                className="attachment-btn" 
+                onClick={() => fileInputRef.current?.click()} 
+                disabled={isExtracting || isGenerating}
+                title="Attach Files"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+              </button>
+
+              <textarea 
+                className="input-field"
+                placeholder="Message AI..."
+                value={input}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  e.target.style.height = 'auto';
+                  e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
+                }}
+                onKeyDown={handleKeyDown}
+                rows={1}
+              />
+              <button 
+                className="send-btn" 
+                onClick={handleSend}
+                disabled={(!input.trim() && extractedFiles.length === 0) || isGenerating || isExtracting}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="22" y1="2" x2="11" y2="13"></line>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
       </main>

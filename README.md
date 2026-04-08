@@ -1,5 +1,4 @@
 
-(https://react.dev/learn/react-compiler/installation).
 
 ## Expanding the ESLint configuration
 

@@ -6,7 +6,7 @@ import logo from './assets/notebot_logo.png';
 import { extractTextFromFile } from './utils/fileParser';
 
 const isEnvKeySet = !!import.meta.env.VITE_GROQ_API_KEY;
-
+// fucl
 function App() {
   const [apiKey, setApiKey] = useState(() => isEnvKeySet ? import.meta.env.VITE_GROQ_API_KEY : (localStorage.getItem('groqApiKey') || ''));
   const [messages, setMessages] = useState([]);

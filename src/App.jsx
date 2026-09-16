@@ -1,11 +1,17 @@
 import { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { streamChat } from './api';
+import { streamChat, fetchModels, pickDefaultModel, fitToBudget, probeModelLimits, FALLBACK_MODEL } from './api';
 import './index.css';
-import logo from './assets/notebot_logo.png';
 import { extractTextFromFile } from './utils/fileParser';
 
 const isEnvKeySet = !!import.meta.env.VITE_GROQ_API_KEY;
+
+const greetingFor = (hasKey) => hasKey
+  ? "Hello! I'm NoteBot. How can I help you take notes and brainstorm today?"
+  : "Hello! I'm NoteBot. Please enter your API Key in the sidebar to start chatting.";
+
+const isGreeting = (msg) => msg.role === 'assistant'
+  && (msg.content.includes("Hello! I'm powered by Groq") || msg.content.includes("Hello! I'm NoteBot"));
 
 function App() {
   const [apiKey, setApiKey] = useState(() => isEnvKeySet ? import.meta.env.VITE_GROQ_API_KEY : (localStorage.getItem('groqApiKey') || ''));
@@ -16,7 +22,12 @@ function App() {
   const messagesEndRef = useRef(null);
   const [extractedFiles, setExtractedFiles] = useState([]);
   const [isExtracting, setIsExtracting] = useState(false);
+  const [models, setModels] = useState([]);
+  const [model, setModel] = useState(FALLBACK_MODEL);
+  const [retryNotice, setRetryNotice] = useState('');
   const fileInputRef = useRef(null);
+
+  const hasKey = isEnvKeySet || apiKey.trim() !== '';
 
   useEffect(() => {
     if (!isEnvKeySet) {
@@ -26,20 +37,35 @@ function App() {
 
   useEffect(() => {
     setMessages(prev => {
-      if (prev.length === 0 || (prev.length === 1 && prev[0].role === 'assistant' && (prev[0].content.includes("Hello! I'm powered by Groq") || prev[0].content.includes("Hello! I'm NoteBot")))) {
-        const hasKey = isEnvKeySet || (apiKey && apiKey.trim() !== '');
-        const greetingMsg = hasKey 
-          ? "Hello! I'm NoteBot. How can I help you take notes and brainstorm today?" 
-          : "Hello! I'm NoteBot. Please enter your API Key in the sidebar to start chatting.";
-        
-        if (prev.length === 1 && prev[0].content === greetingMsg) {
-          return prev;
-        }
-        return [{ role: 'assistant', content: greetingMsg }];
-      }
-      return prev;
+      if (prev.length > 1 || (prev.length === 1 && !isGreeting(prev[0]))) return prev;
+      const greetingMsg = greetingFor(hasKey);
+      if (prev.length === 1 && prev[0].content === greetingMsg) return prev;
+      return [{ role: 'assistant', content: greetingMsg }];
     });
+  }, [hasKey, messages.length]);
+
+  // Groq retires model ids regularly, so ask the account which ones are live
+  // instead of hard-coding one that may already be decommissioned.
+  useEffect(() => {
+    let cancelled = false;
+    const key = apiKey.trim();
+    if (!key) return;
+
+    fetchModels(key).then(list => {
+      if (cancelled) return;
+      setModels(list);
+      setModel(current => list.some(m => m.id === current) ? current : pickDefaultModel(list));
+    });
+
+    return () => { cancelled = true; };
   }, [apiKey]);
+
+  // Learn this model's rate limit up front so the first message is sized
+  // against the real budget instead of the conservative fallback.
+  useEffect(() => {
+    const key = apiKey.trim();
+    if (key && model) probeModelLimits(model, key);
+  }, [apiKey, model]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -65,7 +91,7 @@ function App() {
     setIsGenerating(true);
 
     try {
-      const chatHistory = newMessages.filter(m => !(m.role === 'assistant' && (m.content.includes("Hello! I'm powered by Groq") || m.content.includes("Hello! I'm NoteBot"))));
+      const chatHistory = newMessages.filter(m => !isGreeting(m));
       
       let contextPrefix = '';
       if (extractedFiles.length > 0) {
@@ -73,29 +99,47 @@ function App() {
         contextPrefix = "You are NoteBot, an advanced AI assistant. Your task is to help users understand, summarize, and extract information from uploaded files and images. Below is the text extracted from the user's uploaded files.\nUse this content as the MAIN SOURCE OF TRUTH to answer the user's questions. If the user asks about the files and the answer is not in the text, clearly say: 'This information is not available in the uploaded content.'\n\nUploaded Content:\n" + fileContents + "\n\n";
       }
 
-      const API_messages = [...chatHistory];
-      if (contextPrefix) {
-        API_messages.unshift({ role: 'system', content: contextPrefix });
+      // Attachments and long histories are what blow the per-minute token
+      // limit, so clip both to what this model can actually accept.
+      const { messages: API_messages, notes } = fitToBudget({
+        systemPrompt: contextPrefix,
+        history: chatHistory,
+        model,
+      });
+      if (notes.length > 0) {
+        setRetryNotice(`To stay within the model's rate limit, ${notes.join(' and ')}.`);
       }
 
-      const generator = streamChat(API_messages, 'llama-3.1-8b-instant', apiKey.trim());
+      const generator = streamChat(API_messages, model, apiKey.trim(), {
+        onRetry: ({ attempt, maxRetries, seconds }) =>
+          setRetryNotice(`Rate limit reached — retrying in ${seconds}s (attempt ${attempt} of ${maxRetries})...`),
+      });
       let assistantContent = '';
-      
-      setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+      let placeholderAdded = false;
 
       for await (const chunk of generator) {
         assistantContent += chunk;
-        setMessages(prev => {
-          const updated = [...prev];
-          updated[updated.length - 1].content = assistantContent;
-          return updated;
-        });
+        if (!placeholderAdded) {
+          // Only create the bubble once the first token lands, so the typing
+          // indicator stays visible while the model is still thinking.
+          placeholderAdded = true;
+          setMessages(prev => [...prev, { role: 'assistant', content: assistantContent }]);
+          continue;
+        }
+        setMessages(prev => prev.map((m, i) =>
+          i === prev.length - 1 ? { ...m, content: assistantContent } : m
+        ));
+      }
+
+      if (!placeholderAdded) {
+        setMessages(prev => [...prev, { role: 'assistant', content: '_(No response returned by the model.)_' }]);
       }
     } catch (err) {
       console.error(err);
       setMessages(prev => [...prev, { role: 'assistant', content: `⚠️ **Error:** ${err.message}` }]);
     } finally {
       setIsGenerating(false);
+      setRetryNotice('');
     }
   };
 
@@ -151,7 +195,7 @@ function App() {
           </div>
           NoteBot
         </div>
-        <button className="new-chat-btn" onClick={() => setMessages([])}>
+        <button className="new-chat-btn" onClick={() => { setMessages([]); setExtractedFiles([]); }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -201,9 +245,17 @@ function App() {
               <line x1="3" y1="18" x2="21" y2="18"></line>
             </svg>
           </button>
-          <div className="model-selector">
-            llama-3.1-8b
-          </div>
+          <select
+            className="model-selector"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            disabled={isGenerating || models.length === 0}
+            title="Model"
+          >
+            {(models.length > 0 ? models : [{ id: model, name: model }]).map(m => (
+              <option key={m.id} value={m.id}>{m.name}</option>
+            ))}
+          </select>
         </header>
 
         <div className="messages-container">
@@ -238,6 +290,10 @@ function App() {
           <div ref={messagesEndRef} />
         </div>
         
+        {retryNotice && (
+          <div className="retry-notice">{retryNotice}</div>
+        )}
+
         <div className="input-container">
           <div className={`input-box ${extractedFiles.length > 0 ? 'with-files' : ''}`}>
             {extractedFiles.length > 0 && (
